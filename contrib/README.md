@@ -686,11 +686,29 @@ Replace the `reduce` in `selectRequirements` (src/x402-guards.ts:142-144) with
 
 ---
 
-## 19. Workspace Publish Integrity (#619, #620, #621, #622)
+## 19. Consistent Node.js Support Matrix (#627)
 
-The executable proposal in
-[contrib/workspace-publish-integrity/](workspace-publish-integrity/README.md)
-adds contributor-safe reference checks for public SDK imports, coordinated
-breaking releases, workspace-local SDK resolution, and isolated workspace
-package installation. Root scripts, CI wiring, and `CONTRIBUTING.md` updates are
-documented for maintainers and intentionally remain outside this contribution.
+[contrib/node-version-matrix](node-version-matrix/README.md) contains an executable
+workspace `engines.node` consistency checker, unit fixtures for missing and drifting
+ranges, and maintainer-ready root package, README, and Node 20 CI fragments. The
+checker identifies Node 20 as the oldest supported version and requires every
+workspace package to match the root range.
+
+## 20. Framework-Free Policy Lifecycle (#630)
+
+[contrib/examples/policy-lifecycle](examples/policy-lifecycle/README.md) exercises the
+real `PolicyFacade` through `listTemplates`, `generate`, `simulate`, and `deploy`
+against an in-memory policy gateway. The test also bundles the TypeScript entry point
+and proves it exits zero as a standalone Node process.
+
+## 21. Agent-Key Mint and Revoke Lifecycle (#629)
+
+[contrib/examples/agent-key-lifecycle](examples/agent-key-lifecycle/README.md) wires
+`wallet.agents` to a mock `AgentKeyRuntime`, mints a spending-limit plus verified-only
+grant, signs once, revokes the key, and proves a later signature is rejected.
+
+## 22. CLI and MCP Payer Settlement Parity (#626)
+
+[contrib/cross-package-payment](cross-package-payment/README.md) is an opt-in integration
+contract that pays the same demo resource through `vellar pay` and MCP `payAndCall`,
+then reconciles amount, transaction-hash shape, and MCP ledger output.
