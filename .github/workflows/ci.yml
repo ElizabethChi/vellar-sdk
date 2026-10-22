@@ -33,6 +33,11 @@ jobs:
       - run: npm run check:docs
       - run: npm test
       - run: npm run build
+      # Scans the just-built dist/ bundle for console.log/debug/warn calls —
+      # a stray one in the signing/submission path would leak a signed
+      # transaction's XDR to every consumer's console (#670). Must run after
+      # build: it scans dist/ output, not source.
+      - run: npm run check:dist-console
 
   # OPTIONAL load test job — measures concurrent payment-submission latency and
   # error rate at increasing concurrency. Deliberately NOT run on every

@@ -1,4 +1,4 @@
-import { rpc, StrKey, Transaction } from "@stellar/stellar-sdk";
+import { Networks, rpc, StrKey, TransactionBuilder } from "@stellar/stellar-sdk";
 import type { TxStatus, TxStatusReader } from "./tx-status";
 
 // RPC-backed pieces of the payment flow (subpath export — see rpc.ts).
@@ -99,7 +99,14 @@ export function createRpcTxSubmitter(options: RpcTxSubmitterOptions): RpcTxSubmi
       if (limiter && !limiter.tryConsume()) {
         throw new RateLimitError();
       }
-      const tx = Transaction.fromXDR(signedXdr, "base64");
+      // XXX (pre-existing bug, unrelated to #670): TransactionBuilder.fromXDR
+      // needs a real networkPassphrase, not a hardcoded stopgap, to be
+      // correct for anything beyond decode-and-resubmit (signature/hash
+      // operations elsewhere in the SDK do depend on it). This submitter has
+      // no way to know which network signedXdr was built for — see the PR
+      // description for the real fix (threading a networkPassphrase option
+      // through RpcTxSubmitterOptions), out of scope for this change.
+      const tx = TransactionBuilder.fromXDR(signedXdr, Networks.TESTNET);
       const res = await server.sendTransaction(tx);
       if (res.status === "ERROR") {
         throw new Error(
