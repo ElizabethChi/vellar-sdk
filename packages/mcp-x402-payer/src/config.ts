@@ -56,6 +56,12 @@ export interface PayerConfig {
    * than a missing co-signer.
    */
   readonly policies: readonly string[];
+  /**
+   * Opt-in Prometheus metrics HTTP port (#676). Undefined ⇒ disabled — this
+   * process stays stdio-only, as it always has, unless an operator explicitly
+   * asks for the endpoint. Binds to 127.0.0.1 only; see metrics.ts.
+   */
+  readonly metricsPort?: number;
   /** The payer secret. Non-enumerable — see the module comment. */
   readonly secret: string;
 }
@@ -218,6 +224,22 @@ function parseMaxResponseBytes(raw: string | undefined): number {
   return value;
 }
 
+/** Parse `VELLAR_X402_METRICS_PORT`. Unset ⇒ disabled (undefined), not a default port. */
+function parseMetricsPort(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new ConfigError(
+      `VELLAR_X402_METRICS_PORT must be a positive integer, got ${JSON.stringify(trimmed)}.`,
+    );
+  }
+  const value = Number(trimmed);
+  if (value <= 0 || value > 65535) {
+    throw new ConfigError("VELLAR_X402_METRICS_PORT must be between 1 and 65535.");
+  }
+  return value;
+}
+
 /**
  * Build the payer configuration from the environment. Throws `ConfigError` with
  * an actionable message — and never with any part of the secret — on bad input.
@@ -228,6 +250,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
   const ceilings = parseAssets(required(env, "VELLAR_X402_ASSETS"));
   const rpcUrl = env.VELLAR_X402_RPC_URL?.trim() || undefined;
   const maxResponseBytes = parseMaxResponseBytes(env.VELLAR_X402_MAX_RESPONSE_BYTES);
+  const metricsPort = parseMetricsPort(env.VELLAR_X402_METRICS_PORT);
 
   const walletAddress = env.VELLAR_X402_WALLET?.trim() || undefined;
   if (walletAddress !== undefined && !StrKey.isValidContract(walletAddress)) {
@@ -255,6 +278,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PayerConfig {
     maxResponseBytes,
     ...(walletAddress !== undefined ? { walletAddress } : {}),
     policies,
+    ...(metricsPort !== undefined ? { metricsPort } : {}),
   };
 
   // Non-enumerable: absent from JSON.stringify, {...spread}, Object.keys, and

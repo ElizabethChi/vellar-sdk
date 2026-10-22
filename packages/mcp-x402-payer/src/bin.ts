@@ -8,6 +8,7 @@
 
 import { loadConfig } from "./config.js";
 import { createSpendLedger } from "./ledger.js";
+import { createPayerMetrics, startMetricsServer } from "./metrics.js";
 import { formatError, log, registerSecret } from "./output.js";
 import { createPayer } from "./payer.js";
 import { createMcpServer, startStdio } from "./server.js";
@@ -27,6 +28,13 @@ async function main(): Promise<void> {
   const signer = smartAccount ? createSmartAccountSigner(config) : createOfficialSigner(config);
   const payer = createPayer({ config, ledger, signer });
 
+  // Opt-in only (#676): absent unless VELLAR_X402_METRICS_PORT is set, so
+  // this process stays stdio-only by default, as it always has.
+  const metrics = config.metricsPort !== undefined ? createPayerMetrics() : undefined;
+  if (metrics && config.metricsPort !== undefined) {
+    startMetricsServer(metrics, config.metricsPort);
+  }
+
   log("info", "vellar x402 payer ready", {
     network: config.network,
     payer: signer.address,
@@ -35,9 +43,10 @@ async function main(): Promise<void> {
     // compromised agent can escape and one it cannot.
     spendLimit: smartAccount ? "chain-enforced (smart account policy)" : "process-only (hot wallet)",
     ...(smartAccount ? { policies: config.policies.length } : {}),
+    metricsEnabled: metrics !== undefined,
   });
 
-  await startStdio(createMcpServer({ payer, config, ledger }));
+  await startStdio(createMcpServer({ payer, config, ledger, metrics }));
 }
 
 main().catch((err) => {

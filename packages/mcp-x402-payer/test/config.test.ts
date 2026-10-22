@@ -119,3 +119,35 @@ describe("loadConfig — network and limits", () => {
     expect(() => loadConfig(testEnv({ maxResponseBytes: "abc" }))).toThrow(/positive integer/);
   });
 });
+
+describe("loadConfig — metrics endpoint (#676)", () => {
+  it("is disabled (undefined) by default, not bound to any default port", () => {
+    const config = loadConfig(testEnv());
+    expect(config.metricsPort).toBeUndefined();
+  });
+
+  it("enables with a valid VELLAR_X402_METRICS_PORT", () => {
+    const env = { ...testEnv(), VELLAR_X402_METRICS_PORT: "9464" };
+    const config = loadConfig(env);
+    expect(config.metricsPort).toBe(9464);
+  });
+
+  it("rejects a non-numeric port", () => {
+    const env = { ...testEnv(), VELLAR_X402_METRICS_PORT: "not-a-port" };
+    expect(() => loadConfig(env)).toThrow(/must be a positive integer/);
+  });
+
+  it("rejects a port outside 1-65535", () => {
+    expect(() =>
+      loadConfig({ ...testEnv(), VELLAR_X402_METRICS_PORT: "0" }),
+    ).toThrow(/between 1 and 65535/);
+    expect(() =>
+      loadConfig({ ...testEnv(), VELLAR_X402_METRICS_PORT: "65536" }),
+    ).toThrow(/between 1 and 65535/);
+  });
+
+  it("treats an empty string the same as unset", () => {
+    const env = { ...testEnv(), VELLAR_X402_METRICS_PORT: "" };
+    expect(loadConfig(env).metricsPort).toBeUndefined();
+  });
+});

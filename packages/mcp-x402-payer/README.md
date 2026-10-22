@@ -92,6 +92,7 @@ one prompt injection away from being echoed back out.
 | `VELLAR_X402_NETWORK` | no | `testnet` (default) or `mainnet` |
 | `VELLAR_X402_RPC_URL` | no | Soroban RPC; defaults per network |
 | `VELLAR_X402_MAX_RESPONSE_BYTES` | no | Inline-content cap, default `262144` |
+| `VELLAR_X402_METRICS_PORT` | no | Enables a Prometheus metrics endpoint on this port — see [Metrics](#metrics) |
 
 ¹ Set exactly one of the two. `VELLAR_X402_SECRET_FILE` keeps the secret out of
 the process environment, where it is visible to child processes.
@@ -132,6 +133,40 @@ On macOS you can source the key from the keychain rather than a file:
 ```sh
 VELLAR_X402_SECRET="$(security find-generic-password -s vellar-x402-payer -w)"
 ```
+
+## Metrics
+
+Set `VELLAR_X402_METRICS_PORT` to run a Prometheus text-format metrics
+endpoint alongside the stdio MCP transport — **disabled by default**. This
+process is stdio-only unless you explicitly opt in; a hot-wallet-holding
+process should never open an unexpected port.
+
+```sh
+VELLAR_X402_METRICS_PORT=9464
+```
+
+```sh
+curl http://127.0.0.1:9464/metrics
+```
+
+Binds to `127.0.0.1` only, never every interface — the endpoint has no
+authentication of its own (Prometheus text format has none either), so
+exposing it beyond localhost needs an operator-managed reverse proxy in
+front of it, not a flag here that could be flipped without that protection
+in place.
+
+Exposed counters:
+
+| Metric | Labels | Meaning |
+| --- | --- | --- |
+| `vellar_x402_payment_spend_base_units_total` | `asset` | Cumulative CONFIRMED spend, in the asset's base units |
+| `vellar_x402_payment_success_total` | `asset` | Confirmed settlements |
+| `vellar_x402_payment_failure_total` | `reason` | Payment attempts that did not settle, by error name |
+| `vellar_x402_session_ceiling_rejection_total` | `asset` | Attempts refused for exceeding the session spend ceiling |
+
+All four reset when the process restarts, same as the session ledger they
+sit beside — this is a point-in-time view of this process's lifetime, not a
+durable record. Scrape and store it yourself if you want history.
 
 ## Tools
 

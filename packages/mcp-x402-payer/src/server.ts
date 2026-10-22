@@ -21,7 +21,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import type { PayerConfig } from "./config.js";
+import { SessionCeilingExceededError } from "./errors.js";
 import type { SpendLedger } from "./ledger.js";
+import type { PayerMetrics } from "./metrics.js";
 import {
   divertStdoutToStderr,
   formatError,
@@ -151,6 +153,30 @@ export interface ServerDeps {
   payer: Payer;
   config: PayerConfig;
   ledger: SpendLedger;
+  /** Optional — absent when VELLAR_X402_METRICS_PORT is unset (#676). */
+  metrics?: PayerMetrics;
+}
+
+/**
+ * Record a payment attempt's outcome (#676), from the result/error every
+ * x402_pay-shaped tool handler already has in its try/catch — not a new seam,
+ * just observing the one that's already there.
+ */
+function recordPaymentOutcome(metrics: PayerMetrics | undefined, result: PayResult): void {
+  if (!metrics) return;
+  if (result.paid && result.settlement) {
+    metrics.recordPaymentSuccess(result.settlement.asset, BigInt(result.settlement.amount));
+  }
+  // `paid: false` with no settlement means no payment was required at all —
+  // not a failure, nothing to count either way.
+}
+
+function recordPaymentFailure(metrics: PayerMetrics | undefined, err: unknown): void {
+  if (!metrics) return;
+  if (err instanceof SessionCeilingExceededError) {
+    metrics.recordSessionCeilingRejection(err.asset);
+  }
+  metrics.recordPaymentFailure(err instanceof Error ? err.name : "UnknownError");
 }
 
 export function createMcpServer(deps: ServerDeps): McpServer {
@@ -245,6 +271,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     async ({ resource_url, max_amount }) => {
       try {
         const result = await deps.payer.pay(resource_url, max_amount);
+        recordPaymentOutcome(deps.metrics, result);
         log("info", "payment", {
           url: resource_url,
           paid: result.paid,
@@ -253,6 +280,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         });
         return textResult(renderPayment(result));
       } catch (err) {
+        recordPaymentFailure(deps.metrics, err);
         log("warn", "payment refused or failed", {
           url: resource_url,
           error: formatError(err),
@@ -329,6 +357,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
           query,
           max_amount,
         );
+        recordPaymentOutcome(deps.metrics, result);
         log("info", "pay_and_call", {
           query,
           url: result.selectedUrl,
@@ -345,6 +374,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
         ].join("\n");
         return textResult(`${preamble}\n${renderPayment(result)}`);
       } catch (err) {
+        recordPaymentFailure(deps.metrics, err);
         log("warn", "pay_and_call refused or failed", { query, error: formatError(err) });
         return textResult(`pay_and_call did not complete: ${formatError(err)}`, true);
       }
