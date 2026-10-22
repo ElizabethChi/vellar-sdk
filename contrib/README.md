@@ -698,3 +698,108 @@ The executable proposal in
 
 All implementation targets outside `contrib/` are documented as maintainer
 integration steps and are intentionally unchanged.
+
+---
+
+## 20. Operational Hardening Proposals: Dist Console Scan, MCP Payer Metrics, Key Rotation Runbook, CLI Output Stability (#670, #676, #681, #683)
+
+Four self-contained reference implementations addressing operational
+hardening and reliability gaps, batched into one submission since each is
+small and none depends on another.
+
+### #670: Dist bundle console scan
+
+[contrib/dist-console-scan/](dist-console-scan/README.md) is a script that
+scans a built `dist/` bundle for accidental `console.log`/`debug`/`warn`
+calls, so a stray debug statement in the signing path (or anywhere
+transitively bundled into it) cannot leak a signed transaction's XDR to
+every consumer's browser console.
+
+**What It Does**: scans every built `.js`/`.cjs` file for the three
+flagged console methods (never `console.error`, which is normal, reviewed
+error-surfacing behavior), with an exact file+line allowlist for an
+already-reviewed call. Pure scanning logic is unit tested against in-memory
+content; the folder also ships a clean and a leaky fixture directory for a
+manual CLI run.
+
+**Integration into Core**: copy the script and test to `scripts/`, add an
+npm script (`check:dist-console`), and wire it into `.github/workflows/ci.yml`
+after `npm run build`. Note: at the time of this submission, `npm run build`
+itself fails on two pre-existing, unrelated bugs (a malformed docblock in
+`src/x402-signer.ts` and a nonexistent `Transaction.fromXDR` call in
+`src/tx-rpc.ts`) that a maintainer needs to fix first for this check to run
+against a real bundle; see the folder's README for specifics.
+
+### #676: MCP payer Prometheus metrics endpoint
+
+[contrib/mcp-payer-metrics/](mcp-payer-metrics/README.md) is an opt-in
+Prometheus text-format metrics endpoint for `packages/mcp-x402-payer`,
+tracking cumulative confirmed spend (by asset, bigint-precise), payment
+success count (by asset), payment failure count (by error reason), and
+session-ceiling rejections (by asset).
+
+**What It Does**: `createPayerMetrics()` plus an HTTP server bound to
+`127.0.0.1` only (never every interface, since the endpoint has no auth of
+its own), disabled unless a caller opts in. Tests cover empty-state
+rendering, a simulated payment sequence, multi-asset and multi-reason
+series staying distinct, bigint precision past `Number.MAX_SAFE_INTEGER`,
+label escaping, and the HTTP server's GET/non-GET/bind-address behavior.
+
+**Integration into Core**: add `metricsPort?: number` to `PayerConfig` in
+`packages/mcp-x402-payer/src/config.ts` parsed from a new
+`VELLAR_X402_METRICS_PORT` env var (undefined by default), add `metrics?:
+PayerMetrics` to `ServerDeps` in `src/server.ts` and call it from the
+`x402_pay`/`x402_pay_and_call` handlers' existing try/catch blocks, and
+wire it up in `src/bin.ts`. Exact line references are in the folder's
+README.
+
+### #681: Signer key rotation runbook
+
+[contrib/rotate-mcp-payer-key/](rotate-mcp-payer-key/rotate-mcp-payer-key.md)
+is an operator-facing runbook for rotating `vellar-mcp-x402-payer`'s one
+signer key if it is suspected compromised, covering both the layer 1 (hot
+wallet, no on-chain revocation exists) and layer 2 (smart-account session
+key, revocable via `wallet.agents.revoke`) configurations.
+
+**What It Does**: walks through provisioning a new key, the brief
+intentional overlap window, revoking the old key on-chain (the step that
+actually stops a compromised layer-2 key from spending), why the in-memory
+spend ledger needs no migration on restart, and how to confirm the
+rotation took. An accompanying acceptance test
+(`rotate-mcp-payer-key.ts`/`.test.ts`, following the same mock-runtime
+pattern as `contrib/examples/agent-key-lifecycle`) proves the documented
+mint-overlap-revoke sequence is executable in order against a mock
+`AgentKeyRuntime`.
+
+**Integration into Core**: copy the runbook to
+`website/content/docs/operators/rotate-mcp-payer-key.md` and link it from
+the operator docs index; the acceptance test can move into
+`contrib/examples/rotate-mcp-payer-key/` or stay here, a maintainer's call.
+
+### #683: CLI output stability across Node versions
+
+[contrib/cli-output-stability/](cli-output-stability/README.md) proves the
+CLI's human-readable text output (`search`, `quote`, `inspect`) is a stable
+contract that scripts can parse, via pure, exported render functions and
+inline snapshot tests.
+
+**What It Does**: `renderResource`, `renderChallenge`, and
+`renderTransaction`, duplicated here as standalone pure functions matching
+the real inline rendering logic in `packages/cli/src/commands/`. Snapshot
+tests cover full/minimal entries, multiple `accepts` options, missing-field
+fallbacks, description truncation, and the conditional `payTo`/fee-sponsorship
+lines, and the folder's README documents the stable-vs-free-to-change
+distinction (line order, labels, fallback text, and conditional-line
+presence are the contract; ANSI styling and cosmetic whitespace are not).
+
+**Integration into Core**: extract each command's inline `console.log`
+sequence in `packages/cli/src/commands/{search,quote,inspect}.ts` into an
+exported pure function matching this folder's `render.ts`, matching
+`pay.ts`'s existing export-pure-helpers-for-testing pattern, move the
+snapshot tests into each command's own test file, document the contract in
+`packages/cli/README.md`, and add a `cli-output-stability` CI job running
+`packages/cli`'s test suite across a Node 20/22 matrix.
+
+All implementation targets outside `contrib/` across these four issues are
+documented as maintainer integration steps above and in each folder's
+README, and are intentionally unchanged by this submission.
