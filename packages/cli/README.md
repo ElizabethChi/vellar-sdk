@@ -77,6 +77,48 @@ account. On a sponsored settlement the source and fee accounts differ and the
 buyer appears in neither, which is fee sponsorship shown on-chain rather than
 asserted.
 
+## Stable vs. free-to-change output
+
+`--json` output is a stable contract today, covered by its own existing
+tests. The **human-readable text** output (what `search`, `quote`, and
+`inspect` print without `--json`) is ALSO a stable contract, for the same
+reason: a script that greps or parses it (e.g. `vellar inspect <hash> | grep
+Successful`) relies on the exact text shown, not just the underlying data.
+
+What counts as part of that contract, snapshot-tested in
+`src/commands/{search,quote,inspect}.test.ts` via `renderResource`,
+`renderChallenge`, and `renderTransaction`:
+
+- Line order and the literal label text (`Hash:`, `Scheme:`, etc, including
+  their exact column alignment/padding).
+- Fallback text for a missing field (`unknown`, `(no resource URL)`).
+- Which lines are omitted entirely when a field is absent (e.g. no `Pay to:`
+  line when `payTo` is unset; no fee-sponsorship note when the fee and
+  source accounts match).
+- The 200-character description truncation marker in `search`.
+
+What is explicitly NOT part of the contract, and may change without a
+`closes`-worthy breaking-change note:
+
+- Color/ANSI styling, if any is added later.
+- Whitespace purely cosmetic to a human reader that no existing snapshot
+  pins (e.g. an extra blank line added between unrelated sections, as long
+  as no snapshot already asserts its absence).
+- Error message wording on stderr (`console.error` paths), these are for a
+  human operator, not for scripting against; script against the exit code
+  instead.
+- The `console.log`/`console.error` call sites themselves, versus some other
+  future I/O mechanism, as long as the printed TEXT is unchanged.
+
+A change to anything in the first list must update the corresponding inline
+snapshot deliberately (`toMatchInlineSnapshot`, run with `vitest run -u` to
+accept a new snapshot), CI fails on the diff otherwise, and the PR
+description should say why the format changed. Snapshot tests run across
+the oldest Node major this package supports (`engines.node` in
+`package.json`) and the newest this repo's CI already validates, in a
+dedicated CI job, so a Node-version-dependent formatting drift (locale
+defaults, `toLocaleString` behavior, etc) is caught too.
+
 ## Environment variables
 
 | Variable | Meaning |

@@ -5,7 +5,7 @@ export const HORIZON_URLS: Record<string, string> = {
   mainnet: "https://horizon.stellar.org",
 };
 
-interface HorizonTransaction {
+export interface HorizonTransaction {
   hash?: string;
   successful?: boolean;
   ledger?: number;
@@ -13,6 +13,36 @@ interface HorizonTransaction {
   fee_account?: string;
   source_account?: string;
   created_at?: string;
+}
+
+/**
+ * Render a Horizon transaction record as the CLI's human-readable text
+ * output. `txHash` falls back for `tx.hash` since Horizon's own response
+ * always carries it, but the fallback keeps this usable if that ever changes.
+ */
+export function renderTransaction(tx: HorizonTransaction, txHash: string): string {
+  const lines = [
+    `Hash:       ${tx.hash ?? txHash}`,
+    `Successful: ${tx.successful}`,
+    `Ledger:     ${tx.ledger}`,
+    `Fee:        ${tx.fee_charged} stroops`,
+    `Source:     ${tx.source_account}`,
+    `Fee acct:   ${tx.fee_account}`,
+    `Created:    ${tx.created_at}`,
+  ];
+
+  // On a sponsored settlement these differ: source is the channel account,
+  // fee_account is the facilitator's sponsor, and the buyer appears in
+  // neither. That is the non-custodial property, visible here.
+  if (tx.fee_account && tx.source_account && tx.fee_account !== tx.source_account) {
+    lines.push(
+      "",
+      "Fee was paid by a different account than the transaction source",
+      "(fee sponsorship shown on-chain, not asserted).",
+    );
+  }
+
+  return lines.join("\n");
 }
 
 export function makeInspectCommand(): Command {
@@ -58,22 +88,7 @@ export function makeInspectCommand(): Command {
           return;
         }
 
-        console.log(`Hash:       ${tx.hash ?? txHash}`);
-        console.log(`Successful: ${tx.successful}`);
-        console.log(`Ledger:     ${tx.ledger}`);
-        console.log(`Fee:        ${tx.fee_charged} stroops`);
-        console.log(`Source:     ${tx.source_account}`);
-        console.log(`Fee acct:   ${tx.fee_account}`);
-        console.log(`Created:    ${tx.created_at}`);
-
-        // On a sponsored settlement these differ: source is the channel
-        // account, fee_account is the facilitator's sponsor, and the buyer
-        // appears in neither. That is the non-custodial property, visible here.
-        if (tx.fee_account && tx.source_account && tx.fee_account !== tx.source_account) {
-          console.log("");
-          console.log("Fee was paid by a different account than the transaction source");
-          console.log("(fee sponsorship shown on-chain, not asserted).");
-        }
+        console.log(renderTransaction(tx, txHash));
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);

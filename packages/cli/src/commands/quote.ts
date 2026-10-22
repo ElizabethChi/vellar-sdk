@@ -34,6 +34,35 @@ export function decodeChallenge(header: string | null, body: string): PaymentReq
   }
 }
 
+/**
+ * Render a decoded 402 challenge's payment options as the CLI's human-readable
+ * text output. Every option is printed — a seller may advertise more than one
+ * scheme, and picking one for the reader would hide the choice.
+ */
+export function renderChallenge(url: string, challenge: PaymentRequired): string {
+  const lines: string[] = [`URL:    ${url}`];
+  const accepts = challenge.accepts ?? [];
+  if (accepts.length === 0) {
+    lines.push("The 402 carried no payment options.");
+    return lines.join("\n");
+  }
+
+  for (const [i, a] of accepts.entries()) {
+    if (accepts.length > 1) lines.push(`\nOption ${i + 1}:`);
+    lines.push(`Scheme: ${a.scheme ?? "unknown"}`);
+    lines.push(`Network:${a.network ?? "unknown"}`);
+    lines.push(`Amount: ${a.amount ?? "unknown"} (base units)`);
+    lines.push(`Asset:  ${a.asset ?? "unknown"}`);
+    if (a.payTo) lines.push(`Pay to: ${a.payTo}`);
+    // Without sponsorship the payer needs XLM of their own, which is the
+    // difference between a payable resource and an unpayable one here.
+    lines.push(`Fees:   ${a.extra?.areFeesSponsored ? "sponsored" : "NOT sponsored"}`);
+  }
+
+  lines.push("", "No payment was made and nothing was signed by this call.");
+  return lines.join("\n");
+}
+
 export function makeQuoteCommand(): Command {
   return new Command("quote")
     .description("Check the price of a resource without paying")
@@ -67,29 +96,7 @@ export function makeQuoteCommand(): Command {
           return;
         }
 
-        console.log(`URL:    ${url}`);
-        const accepts = challenge.accepts ?? [];
-        if (accepts.length === 0) {
-          console.log("The 402 carried no payment options.");
-          return;
-        }
-
-        // Every option is printed. A seller may advertise more than one scheme,
-        // and picking one for the reader would hide the choice.
-        for (const [i, a] of accepts.entries()) {
-          if (accepts.length > 1) console.log(`\nOption ${i + 1}:`);
-          console.log(`Scheme: ${a.scheme ?? "unknown"}`);
-          console.log(`Network:${a.network ?? "unknown"}`);
-          console.log(`Amount: ${a.amount ?? "unknown"} (base units)`);
-          console.log(`Asset:  ${a.asset ?? "unknown"}`);
-          if (a.payTo) console.log(`Pay to: ${a.payTo}`);
-          // Without sponsorship the payer needs XLM of their own, which is the
-          // difference between a payable resource and an unpayable one here.
-          console.log(`Fees:   ${a.extra?.areFeesSponsored ? "sponsored" : "NOT sponsored"}`);
-        }
-
-        console.log("");
-        console.log("No payment was made and nothing was signed by this call.");
+        console.log(renderChallenge(url, challenge));
       } catch (err) {
         console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);

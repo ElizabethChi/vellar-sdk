@@ -11,7 +11,7 @@ interface Accept {
 }
 
 /** A catalog entry as returned by `GET /discovery/search`. */
-interface CatalogResource {
+export interface CatalogResource {
   resource?: string;
   serviceName?: string;
   description?: string;
@@ -25,7 +25,7 @@ interface CatalogResource {
  * description is clamped: the catalog already bounds it at 256 characters, but
  * a terminal should not be at the mercy of that promise.
  */
-function renderResource(r: CatalogResource): string {
+export function renderResource(r: CatalogResource): string {
   const lines: string[] = [];
   lines.push(r.resource ?? "(no resource URL)");
   if (r.serviceName) lines.push(`  ${r.serviceName}`);

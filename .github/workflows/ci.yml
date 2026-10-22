@@ -39,6 +39,28 @@ jobs:
       # build: it scans dist/ output, not source.
       - run: npm run check:dist-console
 
+  # CLI output stability (#683): the CLI's human-readable text output is a
+  # contract scripts grep/parse against — see packages/cli/README.md's
+  # "Stable vs. free-to-change output" section. Running the snapshot tests
+  # across the oldest supported Node major (packages/cli's `engines.node`:
+  # >=20) and the newest Node major this repo's own CI already validates
+  # (22, used by the main `ci` job above) catches a Node-version-dependent
+  # formatting drift (locale defaults, Intl/toLocaleString behavior, etc)
+  # that a single-version run would miss.
+  cli-output-stability:
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm test --workspace packages/cli
+
   # OPTIONAL load test job — measures concurrent payment-submission latency and
   # error rate at increasing concurrency. Deliberately NOT run on every
   # push/PR (it is slower and load-timing sensitive); trigger it manually with
